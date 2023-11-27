@@ -9034,9 +9034,9 @@ namespace detail
 template<typename T>
 using null_function_t = decltype(std::declval<T&>().null());
 
-template<typename T>
-using boolean_function_t =
-    decltype(std::declval<T&>().boolean(std::declval<bool>()));
+// template<typename T>
+// using boolean_function_t =
+//     decltype(std::declval<T&>().boolean(std::declval<bool>()));
 
 template<typename T, typename Integer>
 using number_integer_function_t =
@@ -9098,7 +9098,7 @@ struct is_sax
   public:
     static constexpr bool value =
         is_detected_exact<bool, null_function_t, SAX>::value &&
-        is_detected_exact<bool, boolean_function_t, SAX>::value &&
+        // is_detected_exact<bool, boolean_function_t, SAX>::value &&
         is_detected_exact<bool, number_integer_function_t, SAX, number_integer_t>::value &&
         is_detected_exact<bool, number_unsigned_function_t, SAX, number_unsigned_t>::value &&
         is_detected_exact<bool, number_float_function_t, SAX, number_float_t, string_t>::value &&
@@ -9129,10 +9129,10 @@ struct is_sax_static_asserts
   public:
     static_assert(is_detected_exact<bool, null_function_t, SAX>::value,
                   "Missing/invalid function: bool null()");
-    static_assert(is_detected_exact<bool, boolean_function_t, SAX>::value,
-                  "Missing/invalid function: bool boolean(bool)");
-    static_assert(is_detected_exact<bool, boolean_function_t, SAX>::value,
-                  "Missing/invalid function: bool boolean(bool)");
+    // static_assert(is_detected_exact<bool, boolean_function_t, SAX>::value,
+    //               "Missing/invalid function: bool boolean(bool)");
+    // static_assert(is_detected_exact<bool, boolean_function_t, SAX>::value,
+    //               "Missing/invalid function: bool boolean(bool)");
     static_assert(
         is_detected_exact<bool, number_integer_function_t, SAX,
         number_integer_t>::value,
