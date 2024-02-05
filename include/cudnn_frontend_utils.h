@@ -26,7 +26,7 @@
 #include <string>
 #include <vector>
 
-#include "thirdparty/nlohmann/json.hpp"
+#include <nlohmann/json.hpp>
 using json = nlohmann::json;
 
 // Specialization of nlohmann::adl_serializer for std::optional<T>

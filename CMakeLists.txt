@@ -13,6 +13,16 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic -Werror -Wno-error=attributes -Wno-attributes -Wno-error=unused-function -Wno-unused-function)
 endif()
 
+if (NOT TARGET nlohmann_json::nlohmann_json)
+    include(FetchContent)
+    FetchContent_Declare(
+            nlohmann_json
+            URL https://github.com/nlohmann/json/archive/refs/tags/v3.10.5.zip
+            URL_HASH SHA1=f257f8dc27c5b8c085dc887b40cddd18ae1f725c
+            FIND_PACKAGE_ARGS 3.10 NAMES nlohmann_json
+    )
+    FetchContent_MakeAvailable(nlohmann_json)
+endif ()
 add_library(cudnn_frontend INTERFACE)
 
 target_include_directories(
@@ -32,7 +42,7 @@ target_link_libraries(
 
     CUDA::cudart
     CUDA::nvrtc
-    
+    nlohmann_json::nlohmann_json
     # cuDNN dlopen's its libraries
     # Add all libraries in link line as NEEDED
     # This forces the executable itself to find all cudnn sublibraries initially
