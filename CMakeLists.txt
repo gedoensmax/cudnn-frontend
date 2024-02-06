@@ -40,6 +40,7 @@ target_link_libraries(
 )
 
 target_compile_features(cudnn_frontend INTERFACE cxx_std_17)
+target_precompile_headers(cudnn_frontend INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include/thirdparty/nlohmann/json.hpp")
 
 if (CUDNN_FRONTEND_BUILD_SAMPLES)
     add_subdirectory(samples)
