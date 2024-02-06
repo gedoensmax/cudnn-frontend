@@ -24,7 +24,7 @@ if (NOT TARGET nlohmann_json::nlohmann_json)
     FetchContent_MakeAvailable(nlohmann_json)
 endif ()
 add_library(cudnn_frontend INTERFACE)
-
+target_precompile_headers(cudnn_frontend INTERFACE "${nlohmann_json_SOURCE_DIR}/single_include/nlohmann/json.hpp")
 target_include_directories(
     cudnn_frontend INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
