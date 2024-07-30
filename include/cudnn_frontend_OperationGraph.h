@@ -30,9 +30,6 @@
 #include <utility>
 #include <vector>
 
-#include <cudnn.h>
-#include <cudnn_backend.h>
-
 #include "cudnn_frontend_Operation.h"
 #include "cudnn_frontend_utils.h"
 
@@ -65,7 +62,7 @@ class OperationGraph_v8 : public BackendDescriptor {
 
     OperationGraph_v8(OperationGraph_v8 &&from) = default;
     OperationGraph_v8 &
-    operator= (OperationGraph_v8 &&from) = default;
+    operator=(OperationGraph_v8 &&from) = default;
 
     ~OperationGraph_v8() = default;
 
@@ -77,12 +74,12 @@ class OperationGraph_v8 : public BackendDescriptor {
     auto
     getEngineCount(void) const -> int64_t {
         int64_t global_count = -1;
-        auto status          = cudnnBackendGetAttribute(pointer->get_backend_descriptor(),
-                                               CUDNN_ATTR_OPERATIONGRAPH_ENGINE_GLOBAL_COUNT,
-                                               CUDNN_TYPE_INT64,
-                                               1,
-                                               nullptr,
-                                               &global_count);
+        auto status          = detail::get_attribute(pointer->get_backend_descriptor(),
+                                            CUDNN_ATTR_OPERATIONGRAPH_ENGINE_GLOBAL_COUNT,
+                                            CUDNN_TYPE_INT64,
+                                            1,
+                                            nullptr,
+                                            &global_count);
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(this,
                                           status,
@@ -111,7 +108,7 @@ class OperationGraph_v8 : public BackendDescriptor {
 
     feature_vector_t
     getFeatureVector() const {
-        if(feature_vectors.size() != 0) {
+        if (feature_vectors.size() != 0) {
             return feature_vectors[0];
         } else {
             return {};
@@ -166,7 +163,7 @@ class OperationGraphBuilder_v8 {
 
     //! Set numoperations and the operations
     auto
-    setOperationGraph(std::vector<Operation> const & ops_) -> OperationGraphBuilder_v8 & {
+    setOperationGraph(std::vector<Operation> const &ops_) -> OperationGraphBuilder_v8 & {
         m_operationGraph.numOps = ops_.size();
         m_operationGraph.feature_vectors.resize(ops_.size());
         for (auto i = 0u; i < ops_.size(); i++) {
@@ -217,11 +214,11 @@ class OperationGraphBuilder_v8 {
             ops_raw[i] = m_operationGraph.ops[i]->get_backend_descriptor();
         }
 
-        status = cudnnBackendSetAttribute(m_operationGraph.pointer->get_backend_descriptor(),
-                                          CUDNN_ATTR_OPERATIONGRAPH_OPS,
-                                          CUDNN_TYPE_BACKEND_DESCRIPTOR,
-                                          m_operationGraph.numOps,
-                                          ops_raw.data());
+        status = detail::set_attribute(m_operationGraph.pointer->get_backend_descriptor(),
+                                       CUDNN_ATTR_OPERATIONGRAPH_OPS,
+                                       CUDNN_TYPE_BACKEND_DESCRIPTOR,
+                                       m_operationGraph.numOps,
+                                       ops_raw.data());
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_operationGraph,
@@ -229,11 +226,11 @@ class OperationGraphBuilder_v8 {
                 "CUDNN_BACKEND_OPERATIONGRAPH_DESCRIPTOR: SetAttribute CUDNN_ATTR_OPERATIONGRAPH_OPS Failed");
             return std::move(m_operationGraph);
         }
-        status = cudnnBackendSetAttribute(m_operationGraph.pointer->get_backend_descriptor(),
-                                          CUDNN_ATTR_OPERATIONGRAPH_HANDLE,
-                                          CUDNN_TYPE_HANDLE,
-                                          1,
-                                          &m_operationGraph.handle);
+        status = detail::set_attribute(m_operationGraph.pointer->get_backend_descriptor(),
+                                       CUDNN_ATTR_OPERATIONGRAPH_HANDLE,
+                                       CUDNN_TYPE_HANDLE,
+                                       1,
+                                       &m_operationGraph.handle);
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_operationGraph,
@@ -243,7 +240,7 @@ class OperationGraphBuilder_v8 {
         }
 
         // Finalizing the descriptor
-        status = cudnnBackendFinalize(m_operationGraph.pointer->get_backend_descriptor());
+        status = detail::finalize(m_operationGraph.pointer->get_backend_descriptor());
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_operationGraph, status, "CUDNN_BACKEND_OPERATIONGRAPH_DESCRIPTOR: cudnnFinalize Failed");
@@ -265,6 +262,7 @@ class OperationGraphBuilder_v8 {
     OperationGraph_v8 m_operationGraph;
 };
 
-using OperationGraph            = OperationGraph_v8;
-using OperationGraphBuilder     = OperationGraphBuilder_v8;
-}
+using OperationGraph        = OperationGraph_v8;
+using OperationGraphBuilder = OperationGraphBuilder_v8;
+
+}  // namespace cudnn_frontend

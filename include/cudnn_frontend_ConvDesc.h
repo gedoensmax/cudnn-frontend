@@ -29,9 +29,6 @@
 #include <sstream>
 #include <utility>
 
-#include <cudnn.h>
-#include <cudnn_backend.h>
-
 #include "cudnn_frontend_utils.h"
 
 namespace cudnn_frontend {
@@ -58,9 +55,12 @@ class ConvDesc_v8 : public BackendDescriptor {
     describe() const override {
         std::stringstream ss;
         char sep = ' ';
-        ss << "CUDNN_BACKEND_CONVOLUTION_DESCRIPTOR :"
-           << " Datatype: " << to_string(compute_type) << " Mode: " << std::to_string(mode)
-           << " Num Dimensions: " << nDims;
+#ifndef CUDNN_FRONTEND_SKIP_JSON_LIB
+        ss << "CUDNN_BACKEND_CONVOLUTION_DESCRIPTOR :" << " Datatype: " << json{compute_type}
+#else
+        ss << "CUDNN_BACKEND_CONVOLUTION_DESCRIPTOR :" << " Datatype: " << int(compute_type)
+#endif
+           << " Mode: " << std::to_string(mode) << " Num Dimensions: " << nDims;
         ss << " PadLower [";
         for (auto i = 0; i < nDims; i++) {
             ss << sep << padLower[i];
@@ -92,12 +92,12 @@ class ConvDesc_v8 : public BackendDescriptor {
     ~ConvDesc_v8() = default;
 
     // TODO: Deprecate in v1.0
-    cudnnDataType_t
+    DataType_t
     getComputePrecision() const {
         return compute_type;
     }
-    
-    cudnnDataType_t
+
+    DataType_t
     getComputeType() const {
         return compute_type;
     }
@@ -138,14 +138,14 @@ class ConvDesc_v8 : public BackendDescriptor {
     getStride() const {
         return getSpatialStride();
     }
-    
+
    private:
     ConvDesc_v8()                    = default;
     ConvDesc_v8(ConvDesc_v8 const &) = delete;
     ConvDesc_v8 &
     operator=(ConvDesc_v8 const &) = delete;
 
-    cudnnDataType_t compute_type   = CUDNN_DATA_FLOAT;   //! Convolution operation data type
+    DataType_t compute_type             = DataType_t::FLOAT;  //! Convolution operation data type
     cudnnConvolutionMode_t mode         = CUDNN_CONVOLUTION;  //! Convolution vs cross correlation
     int64_t nDims                       = -1;                 //! number of dimensions
     int64_t padLower[CUDNN_DIM_MAX + 1] = {0};                //! d, h, w
@@ -165,8 +165,14 @@ class ConvDescBuilder_v8 {
      */
     //! Set Datatype for the Convolution Operation
     auto
-    setComputeType(cudnnDataType_t data_type_) ->  ConvDescBuilder_v8 & {
-        m_convDesc.compute_type = data_type_;
+    setComputeType(DataType_t data_type) -> ConvDescBuilder_v8 & {
+        m_convDesc.compute_type = data_type;
+        return *this;
+    }
+    // To be deprecated in v1.0.
+    auto
+    setComputeType(cudnnDataType_t data_type_) -> ConvDescBuilder_v8 & {
+        m_convDesc.compute_type = detail::convert_from_cudnn_type(data_type_);
         return *this;
     }
     //! Set Padding Lower of the convDesc
@@ -207,7 +213,6 @@ class ConvDescBuilder_v8 {
     }
     /** @} */
 
-    
     // TODO: Deprecate in v1.0
     auto
     setNDims(int64_t nDims_) -> ConvDescBuilder_v8 & {
@@ -220,7 +225,7 @@ class ConvDescBuilder_v8 {
     }
     // TODO: Deprecate in v1.0
     auto
-    setComputePrecision(cudnnDataType_t data_type_) ->  ConvDescBuilder_v8 & {
+    setComputePrecision(cudnnDataType_t data_type_) -> ConvDescBuilder_v8 & {
         return setComputeType(data_type_);
     }
     // TODO: Deprecate in v1.0
@@ -228,7 +233,7 @@ class ConvDescBuilder_v8 {
     setStrides(int64_t ndims, int64_t const *strides) -> ConvDescBuilder_v8 & {
         return setSpatialStride(ndims, strides);
     }
-    
+
     //! constructs the ConvDesc_v8 by calling the cudnn API
     //! Throws the appropriate error message
     ConvDesc_v8 &&
@@ -264,11 +269,20 @@ class ConvDescBuilder_v8 {
         }
 
         // Once Created lets set the descriptor parameters.
-        status = cudnnBackendSetAttribute(m_convDesc.pointer->get_backend_descriptor(),
-                                          CUDNN_ATTR_CONVOLUTION_COMP_TYPE,
-                                          CUDNN_TYPE_DATA_TYPE,
-                                          1,
-                                          &m_convDesc.compute_type);
+        cudnnDataType_t cudnn_data_type;
+        status = detail::convert_to_cudnn_type(m_convDesc.compute_type, cudnn_data_type);
+        if (status != CUDNN_STATUS_SUCCESS) {
+            set_error_and_throw_exception(
+                &m_convDesc,
+                status,
+                "CUDNN_BACKEND_CONVOLUTION_DESCRIPTOR: SetAttribute CUDNN_ATTR_CONVOLUTION_COMP_TYPE Failed");
+            return std::move(m_convDesc);
+        }
+        status = detail::set_attribute(m_convDesc.pointer->get_backend_descriptor(),
+                                       CUDNN_ATTR_CONVOLUTION_COMP_TYPE,
+                                       CUDNN_TYPE_DATA_TYPE,
+                                       1,
+                                       &cudnn_data_type);
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_convDesc,
@@ -277,11 +291,11 @@ class ConvDescBuilder_v8 {
             return std::move(m_convDesc);
         }
 
-        status = cudnnBackendSetAttribute(m_convDesc.pointer->get_backend_descriptor(),
-                                          CUDNN_ATTR_CONVOLUTION_CONV_MODE,
-                                          CUDNN_TYPE_CONVOLUTION_MODE,
-                                          1,
-                                          &m_convDesc.mode);
+        status = detail::set_attribute(m_convDesc.pointer->get_backend_descriptor(),
+                                       CUDNN_ATTR_CONVOLUTION_CONV_MODE,
+                                       CUDNN_TYPE_CONVOLUTION_MODE,
+                                       1,
+                                       &m_convDesc.mode);
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_convDesc,
@@ -290,11 +304,11 @@ class ConvDescBuilder_v8 {
             return std::move(m_convDesc);
         }
 
-        status = cudnnBackendSetAttribute(m_convDesc.pointer->get_backend_descriptor(),
-                                          CUDNN_ATTR_CONVOLUTION_SPATIAL_DIMS,
-                                          CUDNN_TYPE_INT64,
-                                          1,
-                                          &m_convDesc.nDims);
+        status = detail::set_attribute(m_convDesc.pointer->get_backend_descriptor(),
+                                       CUDNN_ATTR_CONVOLUTION_SPATIAL_DIMS,
+                                       CUDNN_TYPE_INT64,
+                                       1,
+                                       &m_convDesc.nDims);
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_convDesc,
@@ -303,11 +317,11 @@ class ConvDescBuilder_v8 {
             return std::move(m_convDesc);
         }
 
-        status = cudnnBackendSetAttribute(m_convDesc.pointer->get_backend_descriptor(),
-                                          CUDNN_ATTR_CONVOLUTION_PRE_PADDINGS,
-                                          CUDNN_TYPE_INT64,
-                                          m_convDesc.nDims,
-                                          m_convDesc.padLower);
+        status = detail::set_attribute(m_convDesc.pointer->get_backend_descriptor(),
+                                       CUDNN_ATTR_CONVOLUTION_PRE_PADDINGS,
+                                       CUDNN_TYPE_INT64,
+                                       m_convDesc.nDims,
+                                       m_convDesc.padLower);
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_convDesc,
@@ -316,11 +330,11 @@ class ConvDescBuilder_v8 {
             return std::move(m_convDesc);
         }
 
-        status = cudnnBackendSetAttribute(m_convDesc.pointer->get_backend_descriptor(),
-                                          CUDNN_ATTR_CONVOLUTION_POST_PADDINGS,
-                                          CUDNN_TYPE_INT64,
-                                          m_convDesc.nDims,
-                                          m_convDesc.padUpper);
+        status = detail::set_attribute(m_convDesc.pointer->get_backend_descriptor(),
+                                       CUDNN_ATTR_CONVOLUTION_POST_PADDINGS,
+                                       CUDNN_TYPE_INT64,
+                                       m_convDesc.nDims,
+                                       m_convDesc.padUpper);
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_convDesc,
@@ -329,11 +343,11 @@ class ConvDescBuilder_v8 {
             return std::move(m_convDesc);
         }
 
-        status = cudnnBackendSetAttribute(m_convDesc.pointer->get_backend_descriptor(),
-                                          CUDNN_ATTR_CONVOLUTION_DILATIONS,
-                                          CUDNN_TYPE_INT64,
-                                          m_convDesc.nDims,
-                                          m_convDesc.dilation);
+        status = detail::set_attribute(m_convDesc.pointer->get_backend_descriptor(),
+                                       CUDNN_ATTR_CONVOLUTION_DILATIONS,
+                                       CUDNN_TYPE_INT64,
+                                       m_convDesc.nDims,
+                                       m_convDesc.dilation);
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_convDesc,
@@ -342,11 +356,11 @@ class ConvDescBuilder_v8 {
             return std::move(m_convDesc);
         }
 
-        status = cudnnBackendSetAttribute(m_convDesc.pointer->get_backend_descriptor(),
-                                          CUDNN_ATTR_CONVOLUTION_FILTER_STRIDES,
-                                          CUDNN_TYPE_INT64,
-                                          m_convDesc.nDims,
-                                          m_convDesc.stride);
+        status = detail::set_attribute(m_convDesc.pointer->get_backend_descriptor(),
+                                       CUDNN_ATTR_CONVOLUTION_FILTER_STRIDES,
+                                       CUDNN_TYPE_INT64,
+                                       m_convDesc.nDims,
+                                       m_convDesc.stride);
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_convDesc,
@@ -356,7 +370,7 @@ class ConvDescBuilder_v8 {
         }
 
         // Finalizing the descriptor
-        status = cudnnBackendFinalize(m_convDesc.pointer->get_backend_descriptor());
+        status = detail::finalize(m_convDesc.pointer->get_backend_descriptor());
         if (status != CUDNN_STATUS_SUCCESS) {
             set_error_and_throw_exception(
                 &m_convDesc, status, "CUDNN_BACKEND_CONVOLUTION_DESCRIPTOR: cudnnFinalize Failed");
@@ -377,4 +391,8 @@ class ConvDescBuilder_v8 {
    private:
     ConvDesc_v8 m_convDesc;
 };
-}
+
+using ConvDesc        = ConvDesc_v8;
+using ConvDescBuilder = ConvDescBuilder_v8;
+
+}  // namespace cudnn_frontend
